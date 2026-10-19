@@ -28,7 +28,7 @@ An evaluation platform comparing frontier Large Language Models and specialized 
 
 A complete video presentation and live walkthrough explaining the platform architecture, bidirectional BFS ground-truth solving, Live vs. Simulated mode toggling, real-time 3D isometric cube animations, and statistical benchmark analysis is available below:
 
-- **Direct Video File**: [AI_Engr_Assignment2_Demo.mp4](docs/demo/AI_Engr_Assignment2_Demo.mp4)
+- **Direct Video File**: [[AI_Engr_Assignment2_Demo.mp4](docs/demo/AI_Engr_Assignment2_Demo.mp4)](https://drive.google.com/file/d/183GYJQNhf96Q5cjxhZAP1aIdIK4zN2G9/view?usp=sharing)
 - **Local Path in Repository**: `docs/demo/AI_Engr_Assignment2_Demo.mp4`
 
 ---
