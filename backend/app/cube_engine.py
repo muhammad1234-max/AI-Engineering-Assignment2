@@ -564,8 +564,13 @@ def _solve_bfs_bidirectional(
         if best_dist <= depth_f + depth_b:
             break
 
-        # Expand whichever queue has fewer frontier nodes
-        if len(q_forward) <= len(q_backward) and depth_f < (max_depth + 1) // 2 + 1:
+        max_half_f = (max_depth + 1) // 2
+        max_half_b = max_depth // 2
+
+        # Expand whichever queue has fewer frontier nodes while respecting half-depth caps
+        if (len(q_forward) <= len(q_backward) and depth_f < max_half_f) or depth_b >= max_half_b:
+            if depth_f >= max_half_f:
+                break
             depth_f += 1
             for _ in range(len(q_forward)):
                 state, last_face = q_forward.popleft()
@@ -593,6 +598,8 @@ def _solve_bfs_bidirectional(
                         forward_visited[next_state] = (d + 1, face, path + [move])
                         q_forward.append((next_state, face))
         else:
+            if depth_b >= max_half_b:
+                break
             depth_b += 1
             for _ in range(len(q_backward)):
                 state, last_face = q_backward.popleft()
@@ -620,7 +627,7 @@ def _solve_bfs_bidirectional(
                         backward_visited[next_state] = (d + 1, face, path + [move])
                         q_backward.append((next_state, face))
 
-        if depth_f + depth_b >= max_depth and best_path is not None:
+        if depth_f + depth_b >= max_depth:
             break
 
     if best_path is not None:

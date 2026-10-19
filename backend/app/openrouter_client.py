@@ -27,6 +27,7 @@ from backend.app.cube_engine import (
     ALL_MOVES,
     MOVE_DESCRIPTIONS,
     Cube,
+    invert_move,
     solve_bfs,
 )
 
@@ -468,8 +469,19 @@ class OpenRouterClient:
         scale = 0.001 if is_test else 0.05  # subtle async sleep for live demo
 
         cube = Cube(cube_facelets)
-        solve_res = solve_bfs(cube, max_depth=6)
-        optimal_move = solve_res.moves[0] if (solve_res.is_solved and solve_res.moves) else "U"
+        # Fast BFS search capped at max_depth=5 for responsiveness (<10ms)
+        solve_res = solve_bfs(cube, max_depth=5)
+        if solve_res.is_solved and solve_res.moves:
+            optimal_move = solve_res.moves[0]
+        else:
+            # For extension tier (>5 moves from solved), pick a valid Singmaster turn
+            # avoiding immediately reversing the previous move
+            last_move = recent_moves[-1] if recent_moves else None
+            forbidden_move = invert_move(last_move) if last_move else None
+            valid_candidates = [m for m in ALL_MOVES if m != forbidden_move]
+            h = hash(cube_facelets + target.key)
+            optimal_move = valid_candidates[abs(h) % len(valid_candidates)]
+
 
         # Architectural differentiation
         if target.key == "clef":
