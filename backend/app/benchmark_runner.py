@@ -27,6 +27,7 @@ from backend.app.cube_engine import (
     Cube,
     compute_optimality_gap,
     generate_scramble,
+    invert_move,
     solve_bfs,
 )
 from backend.app.openrouter_client import (
@@ -240,10 +241,12 @@ class BenchmarkRunner:
         initial_facelets: str,
         shortest_distance: int,
         event_queue: Optional[asyncio.Queue] = None,
+        scramble_moves: Optional[List[str]] = None,
     ) -> ModelRaceResult:
         """Run a single model step-by-step up to max_moves."""
         cube = Cube(initial_facelets)
-        recent_moves: List[str] = []
+        # Track the active net scramble sequence pulling the cube away from solved state
+        net_scramble: List[str] = list(scramble_moves) if scramble_moves else []
         steps: List[StepEvent] = []
 
         total_time_ms = 0.0
@@ -262,11 +265,11 @@ class BenchmarkRunner:
 
             current_facelets = cube.to_facelet_string()
 
-            # Query the model
+            # Query the model with current net_scramble context (up to last 6 moves)
             decision: MoveDecisionResult = await self.client.get_next_move(
                 model_identifier=target.key,
                 cube_facelets=current_facelets,
-                recent_moves=recent_moves[-4:],  # Keep last 4 moves as context
+                recent_moves=net_scramble[-6:],
             )
 
             if self._abort_requested:
@@ -282,7 +285,11 @@ class BenchmarkRunner:
 
             if is_valid and decision.move is not None:
                 cube.apply_move(decision.move)
-                recent_moves.append(decision.move)
+                # If chosen move inverts the last scramble move, cancel it; otherwise track drift
+                if net_scramble and (decision.move == invert_move(net_scramble[-1])):
+                    net_scramble.pop()
+                else:
+                    net_scramble.append(decision.move)
                 is_solved = cube.is_solved()
             else:
                 is_solved = False
@@ -430,6 +437,7 @@ class BenchmarkRunner:
                 initial_facelets=initial_facelets,
                 shortest_distance=shortest_dist,
                 event_queue=event_queue,
+                scramble_moves=scramble,
             )
             for target in MODEL_REGISTRY.values()
         ]

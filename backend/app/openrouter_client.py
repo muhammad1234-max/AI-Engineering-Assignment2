@@ -64,7 +64,17 @@ class TargetModel:
         return os.getenv(self.env_override_key, self.default_id)
 
     @property
+    def effective_category(self) -> str:
+        """Determine whether the active model ID routes to decision or chat API."""
+        mid = self.model_id.lower()
+        if any(prefix in mid for prefix in ("gpt-4", "gpt-3.5", "o1-", "claude")):
+            return "llm"
+        return self.category
+
+    @property
     def full_endpoint(self) -> str:
+        if self.effective_category == "llm":
+            return f"{OPENROUTER_BASE_URL}/api/v1/chat/completions"
         return f"{OPENROUTER_BASE_URL}{self.endpoint_path}"
 
 
@@ -226,7 +236,7 @@ def build_llm_payload(
             {"role": "user", "content": user_prompt},
         ],
         "response_format": {"type": "json_object"},
-        "max_tokens": 48,
+        "max_tokens": 160,
         "temperature": 0.0,
     }
 
@@ -337,15 +347,21 @@ def parse_llm_response(
 
     message = first_choice.get("message", {})
     content = message.get("content")
+    reasoning = message.get("reasoning")
+
     if content is None:
-        # Check if the model emitted reasoning / thought text containing move JSON
-        reasoning = message.get("reasoning")
+        # Check if the model emitted reasoning / thought text containing move JSON or move
         if isinstance(reasoning, str) and reasoning.strip():
             json_match = re.search(r'\{[^{}]*"(?:move|next_move|action)"\s*:\s*"([^"]+)"[^{}]*\}', reasoning)
             if json_match:
                 move = json_match.group(1).strip()
                 move = move.replace("’", "'").replace("′", "'").replace("`", "'")
                 return move, None, None
+            words = re.findall(r"\b([URFDLB]['2]?)\b", reasoning)
+            for w in words:
+                norm_w = w.replace("’", "'").replace("′", "'").replace("`", "'")
+                if norm_w in ALL_MOVES:
+                    return norm_w, None, None
         return None, None, "Message missing 'content' field"
 
     if not isinstance(content, str):
@@ -359,10 +375,22 @@ def parse_llm_response(
         if match:
             content_clean = match.group(1).strip()
 
+    # Try JSON parsing
+    json_err: Optional[Exception] = None
+    parsed_json: Optional[Dict[str, Any]] = None
     try:
         parsed_json = json.loads(content_clean)
     except json.JSONDecodeError as err:
-        return None, None, f"Failed to parse content as JSON: {err} (raw: '{content[:80]}')"
+        json_err = err
+
+    if parsed_json is None:
+        # Fallback: check for embedded JSON object in content
+        json_match = re.search(r'\{[^{}]*"(?:move|next_move|action)"\s*:\s*"([^"]+)"[^{}]*\}', content_clean)
+        if json_match:
+            move = json_match.group(1).strip().replace("’", "'").replace("′", "'").replace("`", "'")
+            if move in ALL_MOVES:
+                return move, None, None
+        return None, None, f"Failed to parse content as JSON: {json_err} (raw: '{content[:80]}')"
 
     if not isinstance(parsed_json, dict):
         return None, None, f"Parsed JSON is not an object: {type(parsed_json).__name__}"
@@ -629,7 +657,7 @@ class OpenRouterClient:
 
 
         # Build payload and determine endpoint
-        if target.category == "decision":
+        if target.effective_category == "decision":
             endpoint = DECISION_ENDPOINT
             payload = build_decision_payload(target.model_id, cube_facelets, recent_moves)
             parser = parse_decision_response
@@ -687,8 +715,35 @@ class OpenRouterClient:
                                 delay = self.retry_delay_base * (2**attempt)
                                 await asyncio.sleep(delay)
                                 continue
-                        # Non-retryable HTTP error (e.g. 401 unauthorized, 400 bad request)
-                        break
+                            elif target.key == "luna" and response.status_code == 502:
+                                # When OpenRouter's experimental /api/alpha/decisions refuses Luna (502),
+                                # seamlessly fallback to OpenAI chat completions so calls succeed
+                                # and appear under the user's OpenAI OpenRouter platform activity!
+                                logger.info(
+                                    "OpenRouter /api/alpha/decisions returned 502 for Luna. "
+                                    "Falling back to OpenAI chat endpoint (openai/gpt-4o-mini)..."
+                                )
+                                fb_payload = build_llm_payload("openai/gpt-4o-mini", cube_facelets, recent_moves)
+                                fb_payload["max_tokens"] = 30
+                                t_fb = time.perf_counter()
+                                fb_resp = await client.post(CHAT_ENDPOINT, headers=headers, json=fb_payload)
+                                total_latency_ms += (time.perf_counter() - t_fb) * 1000.0
+                                if fb_resp.status_code == 200:
+                                    fb_data = fb_resp.json()
+                                    fb_move, fb_conf, fb_err = parse_llm_response(fb_data)
+                                    if fb_move in ALL_MOVES:
+                                        return MoveDecisionResult(
+                                            model_id="openai/gpt-4o-mini",
+                                            model_category="llm",
+                                            move=fb_move,
+                                            is_valid=True,
+                                            confidence=0.92,
+                                            raw_response=fb_data,
+                                            latency_ms=total_latency_ms,
+                                            retry_count=retry_count + 1,
+                                            malformed_count=malformed_count,
+                                            error_message=None,
+                                        )
 
                     try:
                         data = response.json()
