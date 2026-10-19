@@ -69,8 +69,11 @@ Object.keys(MODELS).forEach((key) => {
     optimalityGap: null,
     latencyMs: 0,
     isSolved: false,
+    stepQueue: [],
+    isProcessingQueue: false,
   };
 });
+state.pendingCompletion = null;
 
 // Format milliseconds as M:SS.CC (matching Page 4 screenshot: 0:14.75)
 function formatStopwatch(ms) {
@@ -200,11 +203,13 @@ function finishRaceAborted() {
 
   Object.keys(MODELS).forEach((key) => {
     const m = state.models[key];
+    m.stepQueue = [];
+    m.isProcessingQueue = false;
     if (m.timerInterval) clearInterval(m.timerInterval);
     if (m.status === 'THINKING' || m.status === 'IN_PROGRESS') {
       m.status = 'ABORTED';
     }
-    updateCardUI(key);
+    updateCardUI(key, null);
   });
   checkBackendHealth();
 }
@@ -365,6 +370,8 @@ function applyNewScramble(data) {
   Object.keys(MODELS).forEach((key) => {
     const m = state.models[key];
     if (m.timerInterval) clearInterval(m.timerInterval);
+    m.stepQueue = [];
+    m.isProcessingQueue = false;
     m.facelets = state.initialFacelets;
     m.moves = [];
     m.moveCount = 0;
@@ -374,7 +381,7 @@ function applyNewScramble(data) {
     m.optimalityGap = null;
     m.latencyMs = 0;
     m.isSolved = false;
-    updateCardUI(key);
+    updateCardUI(key, null);
   });
 }
 
@@ -496,11 +503,14 @@ async function startLiveRace() {
   if (btnAbort) btnAbort.disabled = false;
 
   state.abortController = new AbortController();
+  state.pendingCompletion = null;
 
-  // Reset and start individual model timers
+  // Reset queues and start individual model timers
   Object.keys(MODELS).forEach((key) => {
     const m = state.models[key];
     if (m.timerInterval) clearInterval(m.timerInterval);
+    m.stepQueue = [];
+    m.isProcessingQueue = false;
     m.moves = [];
     m.moveCount = 0;
     m.elapsedMs = 0;
@@ -508,7 +518,7 @@ async function startLiveRace() {
     m.rank = null;
     m.optimalityGap = null;
     m.isSolved = false;
-    updateCardUI(key);
+    updateCardUI(key, null);
 
     m.startTime = Date.now();
     m.timerInterval = setInterval(() => {
@@ -553,6 +563,8 @@ async function startLiveRace() {
       console.error('SSE connection error:', err);
     }
   } finally {
+    // Wait for animation queue to drain smoothly so full solution is visualized
+    await waitForQueuesToDrain();
     state.isRacing = false;
     document.getElementById('btn-start-race').disabled = false;
     document.getElementById('btn-generate-scramble').disabled = false;
@@ -566,6 +578,21 @@ async function startLiveRace() {
     });
     checkBackendHealth();
   }
+}
+
+async function waitForQueuesToDrain() {
+  const maxWait = 60000;
+  const start = Date.now();
+  while (!areAllQueuesDrained() && Date.now() - start < maxWait) {
+    if (!state.isRacing) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+function areAllQueuesDrained() {
+  return Object.values(state.models).every(
+    (m) => m.stepQueue.length === 0 && !m.isProcessingQueue
+  );
 }
 
 function parseAndApplySSE(eventChunk) {
@@ -598,9 +625,35 @@ function handleRaceEvent(eventType, payload) {
   }
 
   if (eventType === 'move_step') {
-    const { model_key, step, move, cube_facelets, is_solved, latency_ms, status } = payload;
+    const { model_key } = payload;
     const m = state.models[model_key];
     if (!m) return;
+
+    // Enqueue step for smooth real-time animation
+    m.stepQueue.push(payload);
+    processModelQueue(model_key);
+  } else if (eventType === 'race_complete') {
+    state.pendingCompletion = payload;
+    if (areAllQueuesDrained()) {
+      applyRaceCompletion(payload);
+      state.pendingCompletion = null;
+    }
+  }
+}
+
+async function processModelQueue(key) {
+  const m = state.models[key];
+  if (!m || m.isProcessingQueue) return;
+  m.isProcessingQueue = true;
+
+  while (m.stepQueue.length > 0) {
+    if (!state.isRacing && m.status === 'ABORTED') {
+      m.stepQueue = [];
+      break;
+    }
+
+    const item = m.stepQueue.shift();
+    const { step, move, cube_facelets, is_solved, latency_ms, status } = item;
 
     if (move) m.moves.push(move);
     m.moveCount = step;
@@ -611,28 +664,47 @@ function handleRaceEvent(eventType, payload) {
     if (is_solved) {
       m.isSolved = true;
       if (m.timerInterval) clearInterval(m.timerInterval);
-    } else if (status === 'RAN_OUT_OF_MOVES' || status === 'ERROR' || status === 'ABORTED') {
+    } else if (status === 'RAN_OUT_OF_MOVES' || status === 'ERROR') {
       if (m.timerInterval) clearInterval(m.timerInterval);
     }
 
-    updateCardUI(model_key, move);
+    // Visually update the cube with smooth in-place CSS facelet transitions & 3D twist
+    updateCardUI(key, move);
     checkBackendHealth();
-  } else if (eventType === 'race_complete') {
 
-    const { participants } = payload;
-    if (participants) {
-      Object.entries(participants).forEach(([key, p]) => {
-        const m = state.models[key];
-        if (!m) return;
-        m.rank = p.rank;
-        m.status = p.status;
-        m.optimalityGap = p.optimality_gap;
-        m.elapsedMs = p.total_time_ms;
-        if (m.timerInterval) clearInterval(m.timerInterval);
-        updateCardUI(key);
-      });
-    }
+    // Paced animation delay based on active playback speed toggle
+    // 1.0x -> 460ms (clear, beautiful, human-watchable pace!)
+    // 2.5x -> 180ms (snappy pace)
+    // 10.0x (Max) -> 45ms (fast pace)
+    const baseDelay = 460;
+    const speed = state.playbackSpeed || 1.0;
+    const delay = Math.max(35, Math.floor(baseDelay / speed));
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
+
+  m.isProcessingQueue = false;
+
+  // If final race completion payload is waiting and all queues are drained
+  if (state.pendingCompletion && areAllQueuesDrained()) {
+    applyRaceCompletion(state.pendingCompletion);
+    state.pendingCompletion = null;
+  }
+}
+
+function applyRaceCompletion(payload) {
+  const { participants } = payload;
+  if (!participants) return;
+
+  Object.entries(participants).forEach(([key, p]) => {
+    const m = state.models[key];
+    if (!m) return;
+    m.rank = p.rank;
+    m.status = p.status;
+    m.optimalityGap = p.optimality_gap;
+    m.elapsedMs = p.total_time_ms;
+    if (m.timerInterval) clearInterval(m.timerInterval);
+    updateCardUI(key, null);
+  });
 }
 
 // ==========================================================================

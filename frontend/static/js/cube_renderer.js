@@ -67,7 +67,7 @@ function buildCubePolygons(facelets) {
       const p3 = `${(cx + (c - r - 1) * dx).toFixed(1)},${(cy + (c + r + 1) * dy).toFixed(1)}`;
 
       svgElements.push(
-        `<polygon class="facelet-poly" data-face="U" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
+        `<polygon class="facelet-poly" data-face="U" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" style="fill: ${fill};" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
       );
     }
   }
@@ -86,7 +86,7 @@ function buildCubePolygons(facelets) {
       const p3 = `${(cx - (3 - c) * dx).toFixed(1)},${(cy + (3 + c) * dy + (r + 1) * s).toFixed(1)}`;
 
       svgElements.push(
-        `<polygon class="facelet-poly" data-face="F" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
+        `<polygon class="facelet-poly" data-face="F" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" style="fill: ${fill};" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
       );
     }
   }
@@ -105,7 +105,7 @@ function buildCubePolygons(facelets) {
       const p3 = `${(cx + c * dx).toFixed(1)},${(cy + (6 - c) * dy + (r + 1) * s).toFixed(1)}`;
 
       svgElements.push(
-        `<polygon class="facelet-poly" data-face="R" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
+        `<polygon class="facelet-poly" data-face="R" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" style="fill: ${fill};" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
       );
     }
   }
@@ -174,9 +174,10 @@ function updateIsometricCube(containerId, facelets, lastMove = null) {
 
     const baseColor = FACE_COLORS[colorChar] || '#FFFFFF';
     const newFill = shadeColor(baseColor, shading);
-    if (poly.getAttribute('fill') !== newFill) {
-      poly.setAttribute('fill', newFill);
-    }
+    
+    // Set both style.fill (for CSS transition) and attribute (for standard SVG)
+    poly.style.fill = newFill;
+    poly.setAttribute('fill', newFill);
   });
 
   // Animate turn twist and move indicator pill if a move was executed
@@ -193,6 +194,8 @@ function updateIsometricCube(containerId, facelets, lastMove = null) {
     }
 
     pill.textContent = lastMove;
+    pill.classList.remove('active');
+    void pill.offsetWidth;
     pill.classList.add('active');
 
     if (pill._clearTimer) clearTimeout(pill._clearTimer);
