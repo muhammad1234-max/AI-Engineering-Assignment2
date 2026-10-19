@@ -147,6 +147,21 @@ async def update_config(req: ConfigUpdateRequest) -> Dict[str, Any]:
     }
 
 
+@app.post("/api/mode/toggle", tags=["System"])
+async def toggle_execution_mode() -> Dict[str, Any]:
+    """Toggle between Simulated Mock Mode ($0 Cost) and Live OpenRouter API."""
+    runner.client.mock_mode = not runner.client.mock_mode
+    return {
+        "status": "toggled",
+        "mock_mode": runner.client.mock_mode,
+        "mode_label": "Simulated / $0 Cost" if runner.client.mock_mode else "Live OpenRouter API",
+        "api_key_configured": bool(runner.client.api_key),
+        "live_api_calls_used": runner.client.live_api_calls_used,
+        "max_live_calls": runner.client.max_live_calls,
+    }
+
+
+
 
 @app.get("/api/models", tags=["Models"])
 async def get_models() -> List[Dict[str, Any]]:

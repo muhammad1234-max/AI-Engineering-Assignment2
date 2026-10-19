@@ -215,7 +215,8 @@ function finishRaceAborted() {
 // ==========================================================================
 
 function setupConfigModal() {
-  const btnMode = document.getElementById('btn-mode-modal');
+  const btnToggle = document.getElementById('btn-mode-toggle');
+  const btnSettings = document.getElementById('btn-open-settings');
   const modal = document.getElementById('config-modal');
   const btnClose = document.getElementById('btn-close-modal');
   const btnCancel = document.getElementById('btn-cancel-modal');
@@ -223,41 +224,73 @@ function setupConfigModal() {
   const selectMode = document.getElementById('modal-mode-select');
   const inputApiKey = document.getElementById('modal-api-key');
 
-  btnMode.addEventListener('click', () => {
-    selectMode.value = state.isMockMode ? 'mock' : 'live';
-    modal.classList.add('open');
-  });
-
-  const closeModal = () => modal.classList.remove('open');
-  btnClose.addEventListener('click', closeModal);
-  btnCancel.addEventListener('click', closeModal);
-
-  btnSave.addEventListener('click', async () => {
-    const isMock = selectMode.value === 'mock';
-    const keyVal = inputApiKey.value.trim();
-
-    try {
-      const payload = { mock_mode: isMock };
-      if (keyVal) payload.api_key = keyVal;
-
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      state.isMockMode = data.mock_mode;
-      if (data.live_api_calls_used !== undefined) {
-        state.liveApiCallsUsed = data.live_api_calls_used;
-        state.maxLiveCalls = data.max_live_calls;
-        updateBudgetBadgeUI(data.live_api_calls_used, data.max_live_calls);
+  // Direct 1-Click Mode Toggle Switch
+  if (btnToggle) {
+    btnToggle.addEventListener('click', async () => {
+      btnToggle.disabled = true;
+      try {
+        const targetMode = !state.isMockMode;
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mock_mode: targetMode }),
+        });
+        const data = await res.json();
+        state.isMockMode = data.mock_mode;
+        if (data.live_api_calls_used !== undefined) {
+          state.liveApiCallsUsed = data.live_api_calls_used;
+          state.maxLiveCalls = data.max_live_calls;
+          updateBudgetBadgeUI(data.live_api_calls_used, data.max_live_calls);
+        }
+        updateModeButtonUI();
+      } catch (err) {
+        console.error('Failed to toggle mode:', err);
+      } finally {
+        btnToggle.disabled = false;
       }
-      updateModeButtonUI();
-      closeModal();
-    } catch (err) {
-      console.error('Failed to update config:', err);
-    }
-  });
+    });
+  }
+
+  // Settings modal for API key configuration
+  if (btnSettings && modal) {
+    btnSettings.addEventListener('click', () => {
+      if (selectMode) selectMode.value = state.isMockMode ? 'mock' : 'live';
+      modal.classList.add('open');
+    });
+  }
+
+  const closeModal = () => modal && modal.classList.remove('open');
+  if (btnClose) btnClose.addEventListener('click', closeModal);
+  if (btnCancel) btnCancel.addEventListener('click', closeModal);
+
+  if (btnSave) {
+    btnSave.addEventListener('click', async () => {
+      const isMock = selectMode ? selectMode.value === 'mock' : true;
+      const keyVal = inputApiKey ? inputApiKey.value.trim() : '';
+
+      try {
+        const payload = { mock_mode: isMock };
+        if (keyVal) payload.api_key = keyVal;
+
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        state.isMockMode = data.mock_mode;
+        if (data.live_api_calls_used !== undefined) {
+          state.liveApiCallsUsed = data.live_api_calls_used;
+          state.maxLiveCalls = data.max_live_calls;
+          updateBudgetBadgeUI(data.live_api_calls_used, data.max_live_calls);
+        }
+        updateModeButtonUI();
+        closeModal();
+      } catch (err) {
+        console.error('Failed to update config:', err);
+      }
+    });
+  }
 }
 
 async function checkBackendHealth() {
@@ -290,25 +323,28 @@ function updateBudgetBadgeUI(used, max) {
     if (curUsed >= curMax && curMax > 0) {
       pill.style.borderColor = '#EF4444';
       pill.style.background = '#450A0A';
+      pill.title = 'Session call limit reached (Guardrail active)';
     } else {
-      pill.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+      pill.style.borderColor = 'rgba(255, 255, 255, 0.12)';
       pill.style.background = '#1E293B';
+      pill.title = `Live OpenRouter budget: ${curUsed} / ${curMax} calls used`;
     }
   }
 }
 
 function updateModeButtonUI() {
-  const btnMode = document.getElementById('btn-mode-modal');
-  if (btnMode) {
-    if (state.isMockMode) {
-      btnMode.textContent = 'Mode: Simulated';
-      btnMode.style.borderColor = '#94A3B8';
-      btnMode.style.color = '#F8FAFC';
-    } else {
-      btnMode.textContent = 'Mode: Live OpenRouter';
-      btnMode.style.borderColor = '#10B981';
-      btnMode.style.color = '#34D399';
-    }
+  const btnMode = document.getElementById('btn-mode-toggle');
+  const txtLabel = document.getElementById('txt-mode-label');
+  if (!btnMode) return;
+
+  if (state.isMockMode) {
+    btnMode.className = 'btn-mode-toggle mode-simulated';
+    if (txtLabel) txtLabel.textContent = 'Mode: Simulated / $0 Cost';
+    btnMode.title = 'Current: Simulated ($0 Cost). Click to switch to Live OpenRouter API.';
+  } else {
+    btnMode.className = 'btn-mode-toggle mode-live';
+    if (txtLabel) txtLabel.textContent = 'Mode: Live OpenRouter API';
+    btnMode.title = 'Current: Live OpenRouter API. Click to switch to Simulated ($0 Cost).';
   }
 }
 
@@ -378,19 +414,17 @@ function renderAllCubes() {
   });
 }
 
-function renderModelCube(key) {
+function renderModelCube(key, lastMove = null) {
   const m = state.models[key];
-  const container = document.getElementById(`cube-${key}`);
-  if (container) {
-    container.innerHTML = renderIsometricCubeSVG(m.facelets);
-  }
+  if (!m) return;
+  updateIsometricCube(`cube-${key}`, m.facelets, lastMove);
 }
 
 // ==========================================================================
 // Card UI Updates (Matching Page 4 Light Theme)
 // ==========================================================================
 
-function updateCardUI(key) {
+function updateCardUI(key, lastMove = null) {
   const m = state.models[key];
   const card = document.getElementById(`card-${key}`);
   if (!card) return;
@@ -446,8 +480,8 @@ function updateCardUI(key) {
     }
   }
 
-  // 5. Update Cube SVG
-  renderModelCube(key);
+  // 5. Update Cube SVG with in-place smooth facelet animation & turn twist
+  renderModelCube(key, lastMove);
 }
 
 // ==========================================================================
@@ -581,7 +615,7 @@ function handleRaceEvent(eventType, payload) {
       if (m.timerInterval) clearInterval(m.timerInterval);
     }
 
-    updateCardUI(model_key);
+    updateCardUI(model_key, move);
     checkBackendHealth();
   } else if (eventType === 'race_complete') {
 

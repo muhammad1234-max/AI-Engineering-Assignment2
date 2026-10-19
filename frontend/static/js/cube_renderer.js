@@ -1,6 +1,7 @@
 /**
- * 3D Isometric Rubik's Cube Renderer for Clean Light Theme.
- * Maps standard 54-character URFDLB facelet strings into responsive SVG graphics.
+ * 3D Isometric Rubik's Cube Renderer with Real-Time Facelet Animations.
+ * Maps standard 54-character URFDLB facelet strings into responsive SVG graphics
+ * and smoothly updates facelet colors and turn twists in real time during races.
  */
 
 const FACE_COLORS = {
@@ -28,11 +29,11 @@ function shadeColor(hex, percent) {
 }
 
 /**
- * Render a responsive 3D isometric projection showing U, F, and R faces.
- * ViewBox is tightly bounded (38 6 124 136) so it scales responsively
- * to fit any card container without vertical overflow.
+ * Generate SVG elements for the 3 visible faces (U, F, R).
+ * Each polygon is given unique data-face and data-idx attributes
+ * for instant in-place DOM updates and smooth color transitions.
  */
-function renderIsometricCubeSVG(facelets) {
+function buildCubePolygons(facelets) {
   if (!facelets || facelets.length !== 54) {
     facelets = 'U'.repeat(9) + 'R'.repeat(9) + 'F'.repeat(9) + 'D'.repeat(9) + 'L'.repeat(9) + 'B'.repeat(9);
   }
@@ -52,7 +53,7 @@ function renderIsometricCubeSVG(facelets) {
   const rFace = facelets.slice(9, 18);
   const fFace = facelets.slice(18, 27);
 
-  // 1. UP (U) Face - Top isometric rhombus grid
+  // 1. UP (U) Face - Top isometric rhombus grid (Indices 0..8)
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
       const idx = r * 3 + c;
@@ -66,12 +67,12 @@ function renderIsometricCubeSVG(facelets) {
       const p3 = `${(cx + (c - r - 1) * dx).toFixed(1)},${(cy + (c + r + 1) * dy).toFixed(1)}`;
 
       svgElements.push(
-        `<polygon points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
+        `<polygon class="facelet-poly" data-face="U" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
       );
     }
   }
 
-  // 2. FRONT (F) Face - Left vertical slanted grid
+  // 2. FRONT (F) Face - Left vertical slanted grid (Indices 0..8)
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
       const idx = r * 3 + c;
@@ -85,12 +86,12 @@ function renderIsometricCubeSVG(facelets) {
       const p3 = `${(cx - (3 - c) * dx).toFixed(1)},${(cy + (3 + c) * dy + (r + 1) * s).toFixed(1)}`;
 
       svgElements.push(
-        `<polygon points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
+        `<polygon class="facelet-poly" data-face="F" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
       );
     }
   }
 
-  // 3. RIGHT (R) Face - Right vertical slanted grid
+  // 3. RIGHT (R) Face - Right vertical slanted grid (Indices 0..8)
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
       const idx = r * 3 + c;
@@ -104,21 +105,99 @@ function renderIsometricCubeSVG(facelets) {
       const p3 = `${(cx + c * dx).toFixed(1)},${(cy + (6 - c) * dy + (r + 1) * s).toFixed(1)}`;
 
       svgElements.push(
-        `<polygon points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
+        `<polygon class="facelet-poly" data-face="R" data-idx="${idx}" points="${p0} ${p1} ${p2} ${p3}" fill="${fill}" stroke="#1E293B" stroke-width="1.8" stroke-linejoin="round" />`
       );
     }
   }
 
+  return svgElements.join('\n');
+}
+
+/**
+ * Generate full SVG markup with subtle drop-shadow and floating move badge.
+ */
+function renderIsometricCubeSVG(facelets, lastMove = '') {
   return `
+    <div class="cube-move-pill ${lastMove ? 'active' : ''}">${lastMove || ''}</div>
     <svg viewBox="40 10 120 130" xmlns="http://www.w3.org/2000/svg" class="isometric-cube-svg" preserveAspectRatio="xMidYMid meet">
       <defs>
         <filter id="cube-subtle-shadow" x="-5%" y="-5%" width="115%" height="115%">
           <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0F172A" flood-opacity="0.12"/>
         </filter>
       </defs>
-      <g filter="url(#cube-subtle-shadow)">
-        ${svgElements.join('\n')}
+      <g filter="url(#cube-subtle-shadow)" class="cube-polys-group">
+        ${buildCubePolygons(facelets)}
       </g>
     </svg>
   `;
+}
+
+/**
+ * Real-Time Animated Cube Updater.
+ * Updates polygon fills in-place to trigger CSS transition animations,
+ * applies a tactile turn rotation twist, and pops the floating move badge.
+ */
+function updateIsometricCube(containerId, facelets, lastMove = null) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const svg = container.querySelector('svg.isometric-cube-svg');
+  if (!svg) {
+    container.innerHTML = renderIsometricCubeSVG(facelets, lastMove);
+    return;
+  }
+
+  if (!facelets || facelets.length !== 54) return;
+
+  const uFace = facelets.slice(0, 9);
+  const rFace = facelets.slice(9, 18);
+  const fFace = facelets.slice(18, 27);
+
+  // In-place smooth color updates
+  const polys = container.querySelectorAll('.facelet-poly');
+  polys.forEach((poly) => {
+    const face = poly.getAttribute('data-face');
+    const idx = parseInt(poly.getAttribute('data-idx'), 10);
+    let colorChar = 'U';
+    let shading = 1.0;
+
+    if (face === 'U') {
+      colorChar = uFace[idx] || 'U';
+      shading = FACE_SHADING.U;
+    } else if (face === 'F') {
+      colorChar = fFace[idx] || 'F';
+      shading = FACE_SHADING.F;
+    } else if (face === 'R') {
+      colorChar = rFace[idx] || 'R';
+      shading = FACE_SHADING.R;
+    }
+
+    const baseColor = FACE_COLORS[colorChar] || '#FFFFFF';
+    const newFill = shadeColor(baseColor, shading);
+    if (poly.getAttribute('fill') !== newFill) {
+      poly.setAttribute('fill', newFill);
+    }
+  });
+
+  // Animate turn twist and move indicator pill if a move was executed
+  if (lastMove) {
+    svg.classList.remove('cube-turn-anim');
+    void svg.offsetWidth; // Force DOM reflow to re-trigger keyframe
+    svg.classList.add('cube-turn-anim');
+
+    let pill = container.querySelector('.cube-move-pill');
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.className = 'cube-move-pill';
+      container.prepend(pill);
+    }
+
+    pill.textContent = lastMove;
+    pill.classList.add('active');
+
+    if (pill._clearTimer) clearTimeout(pill._clearTimer);
+    pill._clearTimer = setTimeout(() => {
+      pill.classList.remove('active');
+    }, 850);
+  }
 }

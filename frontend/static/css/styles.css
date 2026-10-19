@@ -137,12 +137,13 @@ body {
   align-items: center;
   gap: 6px;
   font-size: 0.72rem;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 4px;
   background: #1E293B;
   color: #CBD5E1;
   font-family: var(--font-mono);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.2s ease;
 }
 
 .status-dot {
@@ -153,20 +154,85 @@ body {
 }
 
 .btn-mode-toggle {
-  background: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #1E293B;
   border: 1px solid #475569;
   color: #F8FAFC;
   font-family: var(--font-main);
   font-size: 0.72rem;
-  font-weight: 600;
-  padding: 2px 8px;
+  font-weight: 700;
+  padding: 3px 10px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
 .btn-mode-toggle:hover {
-  background: #475569;
+  transform: translateY(-1px);
+}
+
+.btn-mode-toggle.mode-simulated {
+  background: #1E293B;
+  border-color: #64748B;
+  color: #E2E8F0;
+}
+
+.btn-mode-toggle.mode-simulated:hover {
+  background: #334155;
+  border-color: #94A3B8;
+}
+
+.btn-mode-toggle.mode-live {
+  background: #064E3B;
+  border-color: #10B981;
+  color: #6EE7B7;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+}
+
+.btn-mode-toggle.mode-live:hover {
+  background: #047857;
+  border-color: #34D399;
+}
+
+.toggle-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #94A3B8;
+  transition: all 0.2s ease;
+}
+
+.mode-live .toggle-indicator {
+  background: #10B981;
+  box-shadow: 0 0 6px #10B981;
+  animation: livePulse 1.8s infinite;
+}
+
+@keyframes livePulse {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.btn-settings-icon {
+  background: #1E293B;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #CBD5E1;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.btn-settings-icon:hover {
+  background: #334155;
+  color: #FFFFFF;
+  transform: rotate(20deg);
 }
 
 /* ==========================================================================
@@ -549,6 +615,51 @@ body {
   height: auto;
   width: auto;
   display: block;
+  transform-origin: 100px 75px;
+}
+
+/* Real-Time Facelet Color Transitions */
+.facelet-poly {
+  transition: fill 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Micro-Turn Twist Keyframe Animation */
+@keyframes cubeTwistAnim {
+  0% { transform: scale(1) rotate(0deg); }
+  35% { transform: scale(1.045) rotate(2deg); }
+  70% { transform: scale(1.02) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.isometric-cube-svg.cube-turn-anim {
+  animation: cubeTwistAnim 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Floating Real-Time Move Indicator Pill */
+.cube-move-pill {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(4px);
+  color: #38BDF8;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.16s ease, transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 10;
+}
+
+.cube-move-pill.active {
+  opacity: 1;
+  transform: scale(1);
 }
 
 /* Right: Compact Telemetry Box (Matching Page 4 Screenshots) */

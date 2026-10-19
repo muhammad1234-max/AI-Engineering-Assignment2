@@ -32,13 +32,17 @@
 
       <div class="system-status-pills">
         <div class="status-pill" id="pill-api-budget" title="Session Live API Call Budget Guardrail">
-          <span>API Calls: <strong id="val-api-calls" style="color: #38BDF8;">0</strong> / <span id="val-max-calls">160</span></span>
+          <span>Live Calls: <strong id="val-api-calls" style="color: #38BDF8;">0</strong> / <span id="val-max-calls">5</span></span>
         </div>
         <div class="status-pill">
           <span class="status-dot"></span>
           <span>FastAPI Engine</span>
         </div>
-        <button id="btn-mode-modal" class="btn-mode-toggle">Mode: Simulated</button>
+        <button id="btn-mode-toggle" class="btn-mode-toggle mode-simulated" title="Click to toggle between Simulated ($0 Cost) and Live OpenRouter API">
+          <span class="toggle-indicator"></span>
+          <span id="txt-mode-label">Mode: Simulated / $0 Cost</span>
+        </button>
+        <button id="btn-open-settings" class="btn-settings-icon" title="Configure API Key">⚙️</button>
       </div>
     </div>
   </div>
@@ -385,7 +389,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="/static/js/cube_renderer.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/cube_renderer.js?v=2.1"></script>
+  <script src="/static/js/app.js?v=2.1"></script>
 </body>
 </html>
