@@ -106,6 +106,7 @@ class ConfigUpdateRequest(BaseModel):
     api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
     mock_mode: Optional[bool] = Field(default=None, description="Set to true for simulated mock mode, false for live OpenRouter API calls")
     reset_budget: Optional[bool] = Field(default=False, description="Reset live API call counter to zero")
+    max_live_calls: Optional[int] = Field(default=None, description="Set maximum live API call limit")
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,8 @@ async def update_config(req: ConfigUpdateRequest) -> Dict[str, Any]:
         runner.client.mock_mode = req.mock_mode
     if req.reset_budget:
         runner.client.live_api_calls_used = 0
+    if req.max_live_calls is not None and req.max_live_calls > 0:
+        runner.client.max_live_calls = req.max_live_calls
     return {
         "status": "updated",
         "mock_mode": runner.client.mock_mode,

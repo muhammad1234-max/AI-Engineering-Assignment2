@@ -226,7 +226,7 @@ def build_llm_payload(
             {"role": "user", "content": user_prompt},
         ],
         "response_format": {"type": "json_object"},
-        "max_tokens": 16,
+        "max_tokens": 48,
         "temperature": 0.0,
     }
 
@@ -338,6 +338,14 @@ def parse_llm_response(
     message = first_choice.get("message", {})
     content = message.get("content")
     if content is None:
+        # Check if the model emitted reasoning / thought text containing move JSON
+        reasoning = message.get("reasoning")
+        if isinstance(reasoning, str) and reasoning.strip():
+            json_match = re.search(r'\{[^{}]*"(?:move|next_move|action)"\s*:\s*"([^"]+)"[^{}]*\}', reasoning)
+            if json_match:
+                move = json_match.group(1).strip()
+                move = move.replace("’", "'").replace("′", "'").replace("`", "'")
+                return move, None, None
         return None, None, "Message missing 'content' field"
 
     if not isinstance(content, str):

@@ -256,11 +256,44 @@ function setupConfigModal() {
     });
   }
 
-  // Settings modal for API key configuration
+  // Settings modal for API key and budget configuration
+  const inputMaxCalls = document.getElementById('modal-max-calls');
+  const btnResetBudget = document.getElementById('btn-reset-budget');
+  const txtModalUsed = document.getElementById('modal-live-used-txt');
+  const txtModalMax = document.getElementById('modal-live-max-txt');
+
+  const syncModalBudgetTexts = () => {
+    if (txtModalUsed) txtModalUsed.textContent = state.liveApiCallsUsed;
+    if (txtModalMax) txtModalMax.textContent = state.maxLiveCalls;
+    if (inputMaxCalls) inputMaxCalls.value = state.maxLiveCalls;
+  };
+
   if (btnSettings && modal) {
     btnSettings.addEventListener('click', () => {
       if (selectMode) selectMode.value = state.isMockMode ? 'mock' : 'live';
+      syncModalBudgetTexts();
       modal.classList.add('open');
+    });
+  }
+
+  if (btnResetBudget) {
+    btnResetBudget.addEventListener('click', async () => {
+      try {
+        btnResetBudget.disabled = true;
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset_budget: true }),
+        });
+        const data = await res.json();
+        state.liveApiCallsUsed = 0;
+        updateBudgetBadgeUI(0, state.maxLiveCalls);
+        syncModalBudgetTexts();
+      } catch (err) {
+        console.error('Failed to reset budget:', err);
+      } finally {
+        btnResetBudget.disabled = false;
+      }
     });
   }
 
@@ -272,10 +305,14 @@ function setupConfigModal() {
     btnSave.addEventListener('click', async () => {
       const isMock = selectMode ? selectMode.value === 'mock' : true;
       const keyVal = inputApiKey ? inputApiKey.value.trim() : '';
+      const maxCallsVal = inputMaxCalls ? parseInt(inputMaxCalls.value, 10) : null;
 
       try {
         const payload = { mock_mode: isMock };
         if (keyVal) payload.api_key = keyVal;
+        if (maxCallsVal && !isNaN(maxCallsVal) && maxCallsVal > 0) {
+          payload.max_live_calls = maxCallsVal;
+        }
 
         const res = await fetch('/api/config', {
           method: 'POST',
@@ -450,7 +487,13 @@ function updateCardUI(key, lastMove = null) {
     } else if (m.status === 'ABORTED') {
       statusEl.textContent = 'ABORTED';
       statusEl.style.color = 'var(--color-danger)';
-    } else if (m.status === 'RAN_OUT_OF_MOVES' || m.status === 'ERROR') {
+    } else if (m.status === 'BUDGET_EXHAUSTED') {
+      statusEl.textContent = 'BUDGET LIMIT';
+      statusEl.style.color = '#D97706';
+    } else if (m.status === 'ERROR') {
+      statusEl.textContent = 'API ERROR';
+      statusEl.style.color = '#EF4444';
+    } else if (m.status === 'RAN_OUT_OF_MOVES') {
       statusEl.textContent = 'NOT SOLVED';
     }
 
@@ -460,7 +503,7 @@ function updateCardUI(key, lastMove = null) {
   card.classList.remove('status-solved', 'status-failed');
   if (m.status === 'SOLVED') {
     card.classList.add('status-solved');
-  } else if (m.status === 'RAN_OUT_OF_MOVES' || m.status === 'ERROR') {
+  } else if (m.status === 'RAN_OUT_OF_MOVES' || m.status === 'ERROR' || m.status === 'BUDGET_EXHAUSTED') {
     card.classList.add('status-failed');
   }
 
@@ -664,7 +707,7 @@ async function processModelQueue(key) {
     if (is_solved) {
       m.isSolved = true;
       if (m.timerInterval) clearInterval(m.timerInterval);
-    } else if (status === 'RAN_OUT_OF_MOVES' || status === 'ERROR') {
+    } else if (status === 'RAN_OUT_OF_MOVES' || status === 'ERROR' || status === 'BUDGET_EXHAUSTED') {
       if (m.timerInterval) clearInterval(m.timerInterval);
     }
 

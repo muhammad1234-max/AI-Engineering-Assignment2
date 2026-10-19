@@ -293,8 +293,11 @@ class BenchmarkRunner:
             elif step_num >= self.max_moves:
                 status = "RAN_OUT_OF_MOVES"
             elif not is_valid:
-                # If error occurred on all retries, mark step
-                status = "IN_PROGRESS" if step_num < self.max_moves else "ERROR"
+                # Differentiate between budget guardrail and model/upstream errors
+                if decision.error_message and "Hard Cost Guardrail" in decision.error_message:
+                    status = "BUDGET_EXHAUSTED"
+                else:
+                    status = "ERROR"
 
             step_event = StepEvent(
                 model_key=target.key,
@@ -319,7 +322,7 @@ class BenchmarkRunner:
             if event_queue is not None:
                 await event_queue.put({"type": "move_step", "data": step_event.to_dict()})
 
-            if is_solved:
+            if is_solved or not is_valid:
                 break
 
         # Final status check
