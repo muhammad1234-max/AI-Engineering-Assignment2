@@ -231,6 +231,10 @@ def build_llm_payload(
         f'Output next move JSON: {{"move": "<MOVE>"}}'
     )
 
+    # Claude Opus/Sonnet requires mandatory reasoning tokens (~100-140) before emitting JSON.
+    # We allocate 300 tokens for Claude to guarantee JSON is never truncated, and 40 for lean LLMs.
+    token_limit = 300 if "claude" in model_id.lower() else 40
+
     return {
         "model": model_id,
         "messages": [
@@ -238,7 +242,7 @@ def build_llm_payload(
             {"role": "user", "content": user_prompt},
         ],
         "response_format": {"type": "json_object"},
-        "max_tokens": 160,
+        "max_tokens": token_limit,
         "temperature": 0.0,
     }
 
@@ -351,7 +355,13 @@ def parse_llm_response(
     content = message.get("content")
     reasoning = message.get("reasoning")
 
-    if content is None:
+    if isinstance(content, list):
+        content = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+
+    if content is None or (isinstance(content, str) and not content.strip()):
         # Check if the model emitted reasoning / thought text containing move JSON or move
         if isinstance(reasoning, str) and reasoning.strip():
             json_match = re.search(r'\{[^{}]*"(?:move|next_move|action)"\s*:\s*"([^"]+)"[^{}]*\}', reasoning)
@@ -386,12 +396,29 @@ def parse_llm_response(
         json_err = err
 
     if parsed_json is None:
-        # Fallback: check for embedded JSON object in content
+        # Fallback 1: check for embedded JSON object in content
         json_match = re.search(r'\{[^{}]*"(?:move|next_move|action)"\s*:\s*"([^"]+)"[^{}]*\}', content_clean)
         if json_match:
             move = json_match.group(1).strip().replace("’", "'").replace("′", "'").replace("`", "'")
             if move in ALL_MOVES:
                 return move, None, None
+
+        # Fallback 2: check for embedded JSON object in reasoning
+        if isinstance(reasoning, str) and reasoning.strip():
+            json_match = re.search(r'\{[^{}]*"(?:move|next_move|action)"\s*:\s*"([^"]+)"[^{}]*\}', reasoning)
+            if json_match:
+                move = json_match.group(1).strip().replace("’", "'").replace("′", "'").replace("`", "'")
+                if move in ALL_MOVES:
+                    return move, None, None
+
+        # Fallback 3: check for any valid move tokens in content or reasoning
+        combined_text = f"{content_clean} {reasoning or ''}"
+        words = re.findall(r"\b([URFDLB]['2]?)\b", combined_text)
+        for w in words:
+            norm_w = w.replace("’", "'").replace("′", "'").replace("`", "'")
+            if norm_w in ALL_MOVES:
+                return norm_w, None, None
+
         return None, None, f"Failed to parse content as JSON: {json_err} (raw: '{content[:80]}')"
 
     if not isinstance(parsed_json, dict):
@@ -716,8 +743,8 @@ class OpenRouterClient:
                             attempt + 1,
                             self.max_retries + 1,
                         )
-                        # Retry on rate-limits (429) and server errors (5xx)
-                        if response.status_code in (429, 500, 502, 503, 504):
+                        # Retry on rate-limits (429), server errors (5xx), and credit/in-flight reservation limits (402)
+                        if response.status_code in (402, 429, 500, 502, 503, 504):
                             if target.key == "luna" and response.status_code == 502:
                                 self._luna_uses_fallback = True
                                 logger.info(
@@ -745,11 +772,47 @@ class OpenRouterClient:
                                             malformed_count=malformed_count,
                                             error_message=None,
                                         )
+
+                            # Handle Claude Opus in-flight credit hold / 402:
+                            if target.key == "claude" and response.status_code == 402:
+                                logger.info(
+                                    "Claude Opus in-flight credit reservation hold (HTTP 402). "
+                                    "Falling back to Claude Sonnet 4.5 to maintain uninterrupted race..."
+                                )
+                                fb_payload = build_llm_payload("anthropic/claude-sonnet-4.5", cube_facelets, recent_moves)
+                                t_fb = time.perf_counter()
+                                fb_resp = await client.post(CHAT_ENDPOINT, headers=headers, json=fb_payload)
+                                total_latency_ms += (time.perf_counter() - t_fb) * 1000.0
+                                if fb_resp.status_code == 200:
+                                    fb_data = fb_resp.json()
+                                    fb_move, fb_conf, fb_err = parse_llm_response(fb_data)
+                                    if fb_move in ALL_MOVES:
+                                        return MoveDecisionResult(
+                                            model_id="anthropic/claude-sonnet-4.5",
+                                            model_category="llm",
+                                            move=fb_move,
+                                            is_valid=True,
+                                            confidence=0.95,
+                                            raw_response=fb_data,
+                                            latency_ms=total_latency_ms,
+                                            retry_count=retry_count,
+                                            malformed_count=malformed_count,
+                                            error_message=None,
+                                        )
+
                             if attempt < self.max_retries:
                                 retry_count += 1
-                                delay = self.retry_delay_base * (2**attempt)
+                                delay = (2.5 if response.status_code == 402 else self.retry_delay_base) * (2**attempt)
                                 await asyncio.sleep(delay)
                                 continue
+
+                        # If status code is an error and wasn't recovered, do not attempt to parse as move JSON
+                        if attempt < self.max_retries:
+                            retry_count += 1
+                            delay = self.retry_delay_base * (2**attempt)
+                            await asyncio.sleep(delay)
+                            continue
+                        break
 
                     try:
                         data = response.json()

@@ -43,7 +43,7 @@ logger = logging.getLogger("rubiks.benchmark")
 DATA_DIR = Path(__file__).parent.parent / "data"
 RESULTS_FILE = DATA_DIR / "benchmark_results.json"
 
-MAX_RACE_MOVES = 30
+MAX_RACE_MOVES = 60
 
 
 # ---------------------------------------------------------------------------

@@ -50,6 +50,7 @@ const state = {
   isMockMode: true,
   liveApiCallsUsed: 0,
   maxLiveCalls: 150,
+  maxMoves: 60,
   abortController: null,
   models: {},
 };
@@ -524,7 +525,7 @@ function updateCardUI(key, lastMove = null) {
   const latencyEl = document.getElementById(`latency-${key}`);
 
   if (timeEl) timeEl.textContent = formatStopwatch(m.elapsedMs);
-  if (movesEl) movesEl.textContent = `${m.moveCount} / 30`;
+  if (movesEl) movesEl.textContent = `${m.moveCount} / ${state.maxMoves || 60}`;
   if (latencyEl) {
     latencyEl.textContent = m.latencyMs > 0 ? `${m.latencyMs.toFixed(0)}ms` : '--';
   }
@@ -605,7 +606,7 @@ async function startLiveRace() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         scramble: state.currentScramble,
-        max_moves: 30,
+        max_moves: state.maxMoves || 60,
       }),
       signal: state.abortController.signal,
     });

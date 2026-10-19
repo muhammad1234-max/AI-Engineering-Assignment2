@@ -93,7 +93,7 @@ class RaceRunRequest(BaseModel):
     tier: str = Field(default="primary", description="Tier if scramble is not provided")
     seed: Optional[int] = Field(default=None, description="Seed for scramble generation")
     length: Optional[int] = Field(default=None, description="Explicit scramble length")
-    max_moves: int = Field(default=30, description="Max turn cutoff for each model (default 30)")
+    max_moves: int = Field(default=60, description="Max turn cutoff for each model (default 60)")
 
 
 class BenchmarkSuiteRequest(BaseModel):
