@@ -67,6 +67,8 @@ class TargetModel:
     def effective_category(self) -> str:
         """Determine whether the active model ID routes to decision or chat API."""
         mid = self.model_id.lower()
+        if "-decisions" in mid:
+            return "decision"
         if any(prefix in mid for prefix in ("gpt-4", "gpt-3.5", "o1-", "claude")):
             return "llm"
         return self.category
@@ -468,7 +470,7 @@ class OpenRouterClient:
         self.max_live_calls = (
             max_live_calls
             if max_live_calls is not None
-            else int(os.getenv("MAX_LIVE_API_CALLS_PER_SESSION", "5"))
+            else int(os.getenv("MAX_LIVE_API_CALLS_PER_SESSION", "60"))
         )
         self.live_api_calls_used = 0
 

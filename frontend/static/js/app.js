@@ -175,6 +175,17 @@ function setupControls() {
       state.playbackSpeed = parseFloat(btn.dataset.speed || '1.0');
     });
   });
+
+  const pillBudget = document.getElementById('pill-api-budget');
+  if (pillBudget) {
+    pillBudget.style.cursor = 'pointer';
+    pillBudget.addEventListener('click', () => {
+      const modal = document.getElementById('config-modal');
+      const selectMode = document.getElementById('modal-mode-select');
+      if (selectMode) selectMode.value = state.isMockMode ? 'mock' : 'live';
+      if (modal) modal.classList.add('open');
+    });
+  }
 }
 
 async function abortLiveRace() {
@@ -544,6 +555,21 @@ async function startLiveRace() {
   document.getElementById('btn-generate-scramble').disabled = true;
   const btnAbort = document.getElementById('btn-abort-race');
   if (btnAbort) btnAbort.disabled = false;
+
+  // If in live mode and budget was exhausted from a prior race, auto-reset counter for the new race
+  if (!state.isMockMode && state.liveApiCallsUsed >= state.maxLiveCalls) {
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset_budget: true }),
+      });
+      state.liveApiCallsUsed = 0;
+      updateBudgetBadgeUI(0, state.maxLiveCalls);
+    } catch (e) {
+      console.warn('Auto budget reset error:', e);
+    }
+  }
 
   state.abortController = new AbortController();
   state.pendingCompletion = null;
