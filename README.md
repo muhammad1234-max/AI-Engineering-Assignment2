@@ -6,6 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![Tests](https://img.shields.io/badge/Tests-65%2F65%20Passing%20(100%25)-success.svg)](#test-suite--validation)
+[![Demo Video](https://img.shields.io/badge/Demo%20Video-AI__Engr__Assignment2__Demo.mp4-red.svg)](docs/demo/AI_Engr_Assignment2_Demo.mp4)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
 An evaluation platform comparing frontier Large Language Models and specialized Decision Models on **3D spatial planning, non-Euclidean state tracking, and sequential reasoning** through competitive Rubik's Cube solving races.
@@ -20,6 +21,15 @@ An evaluation platform comparing frontier Large Language Models and specialized 
 - **Repository**: [https://github.com/muhammad1234-max/AI-Engineering-Assignment2](https://github.com/muhammad1234-max/AI-Engineering-Assignment2)
 
 > **Submission Note**: A permanent, high-contrast identity banner is rendered across all views in the interactive web application, ensuring academic integrity and verification during recorded benchmark runs.
+
+---
+
+## 📹 Project Demonstration Video
+
+A complete video presentation and live walkthrough explaining the platform architecture, bidirectional BFS ground-truth solving, Live vs. Simulated mode toggling, real-time 3D isometric cube animations, and statistical benchmark analysis is available below:
+
+- **Direct Video File**: [AI_Engr_Assignment2_Demo.mp4](docs/demo/AI_Engr_Assignment2_Demo.mp4)
+- **Local Path in Repository**: `docs/demo/AI_Engr_Assignment2_Demo.mp4`
 
 ---
 
@@ -205,6 +215,9 @@ AI-Engineering-Assignment2/
 │       ├── test_cube_engine.py      # 25 Unit tests for state, turns, scrambles & BFS
 │       ├── test_openrouter_client.py# 22 Unit tests for Dual-API adapter & payloads
 │       └── test_benchmark_runner.py # 18 Tests for SSE streaming, runner & cost guards
+├── docs/
+│   └── demo/
+│       └── AI_Engr_Assignment2_Demo.mp4 # Full project walkthrough & benchmark demo video
 └── frontend/
     ├── index.html                   # Zero-scroll 100vh responsive layout
     └── static/
