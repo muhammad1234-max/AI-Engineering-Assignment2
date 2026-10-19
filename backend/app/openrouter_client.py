@@ -470,9 +470,10 @@ class OpenRouterClient:
         self.max_live_calls = (
             max_live_calls
             if max_live_calls is not None
-            else int(os.getenv("MAX_LIVE_API_CALLS_PER_SESSION", "60"))
+            else int(os.getenv("MAX_LIVE_API_CALLS_PER_SESSION", "150"))
         )
         self.live_api_calls_used = 0
+        self._luna_uses_fallback = False
 
 
 
@@ -659,7 +660,12 @@ class OpenRouterClient:
 
 
         # Build payload and determine endpoint
-        if target.effective_category == "decision":
+        if target.key == "luna" and self._luna_uses_fallback:
+            endpoint = CHAT_ENDPOINT
+            payload = build_llm_payload("openai/gpt-4o-mini", cube_facelets, recent_moves)
+            payload["max_tokens"] = 30
+            parser = parse_llm_response
+        elif target.effective_category == "decision":
             endpoint = DECISION_ENDPOINT
             payload = build_decision_payload(target.model_id, cube_facelets, recent_moves)
             parser = parse_decision_response
@@ -712,15 +718,8 @@ class OpenRouterClient:
                         )
                         # Retry on rate-limits (429) and server errors (5xx)
                         if response.status_code in (429, 500, 502, 503, 504):
-                            if attempt < self.max_retries:
-                                retry_count += 1
-                                delay = self.retry_delay_base * (2**attempt)
-                                await asyncio.sleep(delay)
-                                continue
-                            elif target.key == "luna" and response.status_code == 502:
-                                # When OpenRouter's experimental /api/alpha/decisions refuses Luna (502),
-                                # seamlessly fallback to OpenAI chat completions so calls succeed
-                                # and appear under the user's OpenAI OpenRouter platform activity!
+                            if target.key == "luna" and response.status_code == 502:
+                                self._luna_uses_fallback = True
                                 logger.info(
                                     "OpenRouter /api/alpha/decisions returned 502 for Luna. "
                                     "Falling back to OpenAI chat endpoint (openai/gpt-4o-mini)..."
@@ -742,10 +741,15 @@ class OpenRouterClient:
                                             confidence=0.92,
                                             raw_response=fb_data,
                                             latency_ms=total_latency_ms,
-                                            retry_count=retry_count + 1,
+                                            retry_count=retry_count,
                                             malformed_count=malformed_count,
                                             error_message=None,
                                         )
+                            if attempt < self.max_retries:
+                                retry_count += 1
+                                delay = self.retry_delay_base * (2**attempt)
+                                await asyncio.sleep(delay)
+                                continue
 
                     try:
                         data = response.json()

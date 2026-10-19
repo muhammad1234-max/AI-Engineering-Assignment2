@@ -49,7 +49,7 @@ const state = {
   isRacing: false,
   isMockMode: true,
   liveApiCallsUsed: 0,
-  maxLiveCalls: 160,
+  maxLiveCalls: 150,
   abortController: null,
   models: {},
 };

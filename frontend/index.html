@@ -31,8 +31,8 @@
       </div>
 
       <div class="system-status-pills">
-        <div class="status-pill" id="pill-api-budget" title="Session Live API Call Budget Guardrail">
-          <span>Live Calls: <strong id="val-api-calls" style="color: #38BDF8;">0</strong> / <span id="val-max-calls">5</span></span>
+        <div class="status-pill" id="pill-api-budget" title="Session Live API Call Budget Guardrail (Click to configure)">
+          <span>Live Calls: <strong id="val-api-calls" style="color: #38BDF8;">0</strong> / <span id="val-max-calls">150</span></span>
         </div>
         <div class="status-pill">
           <span class="status-dot"></span>
@@ -385,13 +385,13 @@
             Live API Session Budget (Max Calls):
           </label>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="number" id="modal-max-calls" class="input-field" style="max-width: 110px;" min="1" max="100" value="5" />
+            <input type="number" id="modal-max-calls" class="input-field" style="max-width: 110px;" min="1" max="500" value="150" />
             <button type="button" id="btn-reset-budget" class="btn btn-secondary" style="font-size: 0.78rem; padding: 6px 12px; white-space: nowrap;">
-              Reset Counter (<span id="modal-live-used-txt">0</span> / <span id="modal-live-max-txt">5</span>)
+              Reset Counter (<span id="modal-live-used-txt">0</span> / <span id="modal-live-max-txt">150</span>)
             </button>
           </div>
           <small style="display:block; color: var(--text-muted); font-size: 0.74rem; margin-top: 6px; line-height: 1.4;">
-            <strong>Cost Guardrail Notice:</strong> A 4-model race on a 3-move scramble requires 12–25 API calls. The initial 5-call budget deliberately stops after move 1 to prevent unexpected charges. You can raise the limit here or run in Simulated Mode ($0 Cost) for full visual solves.
+            <strong>Cost Guardrail Notice:</strong> Session limit is set to 150 calls, enabling multiple complete multi-turn races without early cutoffs. You can adjust this limit or reset the counter at any time.
           </small>
         </div>
       </div>
@@ -404,7 +404,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="/static/js/cube_renderer.js?v=2.4"></script>
-  <script src="/static/js/app.js?v=2.4"></script>
+  <script src="/static/js/cube_renderer.js?v=2.5"></script>
+  <script src="/static/js/app.js?v=2.5"></script>
 </body>
 </html>
